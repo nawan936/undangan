@@ -2437,32 +2437,134 @@ var context = new AudioContext();
                 </div>
 
 
-
     <button type="submit" class="btn btn-primary">Kirim</button>
 </form>
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
 <script>
-$(document).ready(function(){
-    $("#push_ucapan").submit(function(e){
-        e.preventDefault(); // cegah reload form
+(() => {
+    const storageKey = 'ucapan-9079-local';
 
-        $.ajax({
-            type: "POST",
-            url: "simpan_ucapan.php", 
-            data: $(this).serialize(),
-            success: function(response){
-                // Tambahkan komentar baru ke atas box tanpa reload
-                $("#box_ucapan").prepend(response);
+    function getStorage() {
+        try {
+            window.localStorage.setItem('__storage_test__', '1');
+            window.localStorage.removeItem('__storage_test__');
+            return window.localStorage;
+        } catch (error) {
+            return window.sessionStorage;
+        }
+    }
 
-                // Reset form
-                $("#push_ucapan")[0].reset();
-            },
-            error: function(xhr, status, error){
-                alert("Gagal mengirim ucapan: " + error);
+    function readComments() {
+        try {
+            const raw = getStorage().getItem(storageKey);
+            return raw ? JSON.parse(raw) : [];
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function saveComments(comments) {
+        getStorage().setItem(storageKey, JSON.stringify(comments));
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function formatDate(timestamp) {
+        return new Date(timestamp).toLocaleString('id-ID', {
+            dateStyle: 'medium',
+            timeStyle: 'short'
+        });
+    }
+
+    function renderComments() {
+        const box = document.getElementById('box_ucapan');
+        if (!box) {
+            return;
+        }
+
+        const comments = readComments();
+
+        if (!comments.length) {
+            box.innerHTML = '<div style="padding:12px;color:#666;">Belum ada ucapan. Jadilah yang pertama menulis.</div>';
+            return;
+        }
+
+        box.innerHTML = comments.map((comment) => {
+            const nama = escapeHtml(comment.nama || 'Anonim');
+            const ucapan = escapeHtml(comment.ucapan || '').replace(/\n/g, '<br>');
+            const status = String(comment.ket_hadir) === '1' ? 'Hadir' : 'Tidak Hadir';
+            const waktu = comment.createdAt ? formatDate(comment.createdAt) : '';
+
+            return [
+                '<div style="margin-bottom:10px; padding:10px; border-bottom:1px solid #eee">',
+                '<strong>' + nama + '</strong><br>',
+                '<p style="margin-bottom:6px;">' + ucapan + '</p>',
+                '<small>Keterangan: ' + status + (waktu ? ' | ' + waktu : '') + '</small>',
+                '</div>'
+            ].join('');
+        }).join('');
+    }
+
+    function addComment(comment) {
+        const comments = readComments();
+        comments.unshift(comment);
+        saveComments(comments);
+        renderComments();
+    }
+
+    window.loadUcapan = renderComments;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        renderComments();
+
+        const form = document.getElementById('push_ucapan');
+        if (!form) {
+            return;
+        }
+
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const nama = document.getElementById('konfir_nama_2').value.trim();
+            const ucapan = document.getElementById('ucapan_2').value.trim();
+            const ketHadir = document.getElementById('hadir_id').value;
+
+            if (!nama || !ucapan || ketHadir === '') {
+                return;
             }
+
+            addComment({
+                nama: nama,
+                ucapan: ucapan,
+                ket_hadir: ketHadir,
+                createdAt: new Date().toISOString()
+            });
+
+            form.reset();
+
+            const notif = document.getElementById('notif-submt');
+            if (notif) {
+                notif.remove();
+            }
+
+            form.insertAdjacentHTML('afterend', '<p id="notif-submt" style="line-height: 14px;font-weight: 200;font-size: 12px;margin-top: 20px;background-color: #fff8d5;border-radius: 5px;color: #3b3b3b;padding: 5px;">Komentar berhasil disimpan di browser ini</p>');
+
+            setTimeout(function() {
+                const currentNotif = document.getElementById('notif-submt');
+                if (currentNotif) {
+                    currentNotif.remove();
+                }
+            }, 7000);
         });
     });
-});
+})();
 </script>
 
 
@@ -2475,18 +2577,7 @@ $(document).ready(function(){
 
       <div data-aos="fade-up"class="box-ucapan-wrapper">
 <div class="box-ucapan font-p" id="box_ucapan" style="background-color: #fff; text-align: left" data-aos="fade-up">
-    <?php
-    include "koneksi.php"; 
-    $result = mysqli_query($conn, "SELECT * FROM ucapan ORDER BY created_at DESC");
-
-    while ($row = mysqli_fetch_assoc($result)) {
-        echo "<div style='margin-bottom:10px; padding:10px; border-bottom:1px solid #eee'>";
-        echo "<strong>" . htmlspecialchars($row['nama']) . "</strong><br>";
-        echo "<p>" . nl2br(htmlspecialchars($row['ucapan'])) . "</p>";
-        echo "<small>Keterangan: " . ($row['ket_hadir'] ? 'Hadir' : 'Tidak Hadir'). "</small>";
-        echo "</div>";
-    }
-    ?>
+    <div style="padding:12px;color:#666;">Belum ada ucapan. Jadilah yang pertama menulis.</div>
 </div>
 
     </div>
@@ -3379,116 +3470,8 @@ $('#auto_scroll').on('click', function(e) {
         }
 
     }
-
-
-    $("#push_ucapan").submit(function(e) {
-
-        e.preventDefault(); // avoid to execute the actual submit of the form.
-        var buttonText = $('#tombol_kirim_2').text();
-        $('#tombol_kirim_2').prop('disabled', true);
-        $('#konfir_nama_2').prop('readonly', true);
-        $('#ucapan_2').prop('readonly', true);
-        $('#tombol_kirim_2').text('Mengirim ...');
-
-
-        var form = $(this);
-        var actionUrl = form.attr('action');
-
-
-        var formTambahan = [];
-
-        $("#formContainer .form-value").each(function(){
-            formTambahan.push({
-                field_name: $(this).data('field_name'),
-                value: $(this).val().trim()
-            })
-        })
-
-        // Display the collected data in the console
-        // console.log(formData2);
-
-        // var formTambahan = '';
-        // if (formData2.length > 0) {
-        //     var formTambahan = formData2.join(", ");
-        // }
-
-        var csrfToken = $('meta[name="csrf-token"]').attr('content');
-
-        var myData = {
-            _token: csrfToken,
-            pernikahan_id: '9079',
-            nama: $('#konfir_nama_2').val(),
-            ucapan: $('#ucapan_2').val(),
-            formTambahan,
-            wa_tamu: $('#wa_tamu').val(),
-            email_tamu: $('#email_tamu').val(),
-            notif: $('#notif').val(),
-            ket_hadir: $('#hadir_id').val(),
-            jumlah: $('#jumlah_datang_id').val()
-        };
-
-
-        // var myData = form.serialize();
-        // console.log(myData);
-
-        $.ajax({
-            type: "POST",
-            url: actionUrl,
-            data: myData, // serializes the form's elements.
-            beforeSend: function(xhr) {
-                        // Set the CSRF token in the request header
-                        xhr.setRequestHeader("X-CSRFToken", csrfToken);
-                    },
-            success: function(data)
-            {
-                loadUcapan()
-                $('#tombol_kirim_2').prop('disabled', false);
-                $('#ucapan_2').val('');
-                $('#konfir_nama_2').prop('readonly', false);
-                $('#ucapan_2').prop('readonly', false);
-                $('#tombol_kirim_2').text(buttonText);
-                $('#push_ucapan').after('<p id="notif-submt" style="line-height: 14px;font-weight: 200;font-size: 12px;margin-top: 20px;background-color: #fff8d5;border-radius: 5px;color: #3b3b3b;padding: 5px;">Thank you, Your message has been successfully submitted</p>');
-                pembayaran()
-                openShop()
-                localStorage.setItem('isiUcapan', true);
-                const kpd = "Bapak Budi"
-                if(kpd){
-                  localStorage.setItem('ucapanForm-9079-' + "Bapak+Budi", true);
-                }
-                isUserFilledKehadiranForm()
-                setTimeout(function() {
-                    $('#notif-submt').hide()
-                }, 7000);
-            },
-            error: function (jqXHR, exception) {
-                var msg = '';
-                if (jqXHR.status === 0) {
-                    msg = 'Not connect.\n Verify Network.';
-                } else if (jqXHR.status == 404) {
-                    msg = 'Requested page not found. [404]';
-                } else if (jqXHR.status == 500) {
-                    msg = 'Internal Server Error [500].';
-                } else if (exception === 'parsererror') {
-                    msg = 'Requested JSON parse failed.';
-                } else if (exception === 'timeout') {
-                    msg = 'Time out error.';
-                } else if (exception === 'abort') {
-                    msg = 'Ajax request aborted.';
-                } else {
-                    msg = 'Uncaught Error.\n' + jqXHR.responseText;
-                }
-                console.log('Kirim ucapan gagal: '+ msg);
-                $('#tombol_kirim_2').prop('disabled', false);
-
-                $('#konfir_nama_2').prop('readonly', false);
-                $('#ucapan_2').prop('readonly', false);
-                $('#tombol_kirim_2').text('Kirim');
-
-
-            },
-
-        });
-
+    $("#push_ucapan").off("submit").on("submit", function(e) {
+        e.preventDefault();
     });
 
     function isUserFilledPopupKehadiranForm(){
